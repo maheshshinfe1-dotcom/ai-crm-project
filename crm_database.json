@@ -1,0 +1,92 @@
+{
+    "leads": [
+        {
+            "lead_id": "L-64502",
+            "name": "Harjot",
+            "phone": "626367056",
+            "course": "SQL",
+            "source": "Instagram",
+            "status": "CONTACTED"
+        },
+        {
+            "lead_id": "L-71476",
+            "name": "Ehsas",
+            "phone": "9810975068",
+            "course": "Python",
+            "source": "Google",
+            "status": "WON"
+        },
+        {
+            "lead_id": "L-71779",
+            "name": "Ketan",
+            "phone": "9617368586",
+            "course": "SQL",
+            "source": "Instagram",
+            "assigned_to": "Ajit",
+            "status": "WON"
+        },
+        {
+            "lead_id": "L-90990",
+            "name": "Ayesha",
+            "phone": "9617368586",
+            "course": "Python",
+            "source": "Referral",
+            "assigned_to": "Ayush",
+            "score": 90,
+            "grade": "HOT \ud83d\udd25",
+            "status": "NEW"
+        }
+    ],
+    "students": [
+        {
+            "student_id": "STU-6798",
+            "name": "Ketan",
+            "phone": "9617368586",
+            "enrolled_course": "SQL",
+            "sales_owner": "Ajit",
+            "payment_status": "PAID",
+            "total_fee": 60000,
+            "amount_paid": 60000
+        }
+    ],
+    "tasks": [
+        {
+            "task_id": "TSK-520",
+            "client_name": "Satyam",
+            "description": "Call back",
+            "due_date": "Tomorrow 5Pm",
+            "assigned_to": "Amar",
+            "status": "PENDING"
+        }
+    ],
+    "opportunities": [
+        {
+            "opp_id": "OPP-6914",
+            "client_name": "Anuj",
+            "course": "SQL",
+            "deal_value": 40000,
+            "probability": 60,
+            "stage": "Proposal",
+            "owner": "Aryan"
+        }
+    ],
+    "activities": [
+        {
+            "activity_id": "ACT-3184",
+            "client_name": "Anushka",
+            "activity_type": "Call",
+            "notes": "Interested but dicy",
+            "timestamp": "2026-09-30 07:07"
+        }
+    ],
+    "tickets": [
+        {
+            "ticket_id": "TCK-6067",
+            "student_name": "Ketan",
+            "issue": "Portal Error",
+            "priority": "High",
+            "assigned_to": "Akansha",
+            "status": "OPEN"
+        }
+    ]
+}
