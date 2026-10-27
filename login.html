@@ -3,112 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI EDU-CRM | Secure Login</title>
+    <title>AI EDU-CRM | Login</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f4f7f6; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            margin: 0; 
-        }
-        .login-card { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 10px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 350px; 
-        }
-        .login-card h2 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
-        .input-group { margin-bottom: 15px; }
-        .input-group label { display: block; margin-bottom: 5px; color: #7f8c8d; font-size: 14px; }
-        .input-group input { 
-            width: 100%; 
-            padding: 10px; 
-            border: 1px solid #bdc3c7; 
-            border-radius: 5px; 
-            box-sizing: border-box; 
-        }
-        button { 
-            width: 100%; 
-            padding: 12px; 
-            background-color: #6c5ce7; 
-            color: white; 
-            border: none; 
-            border-radius: 5px; 
-            font-size: 16px; 
-            font-weight: bold;
-            cursor: pointer; 
-            transition: 0.3s; 
-        }
-        button:hover { background-color: #5b4bc4; }
-        #error-message { 
-            color: #e74c3c; 
-            font-size: 14px; 
-            text-align: center; 
-            margin-top: 15px; 
-            display: none; 
-        }
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f7f6; margin: 0; }
+        .login-box { background: white; padding: 2.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 350px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        button:hover { background-color: #4f46e5; }
+        .error { color: #e74c3c; font-size: 0.9em; display: none; text-align: center; margin-bottom: 10px; }
     </style>
 </head>
 <body>
+    <div class="login-box">
+        <h2 style="text-align: center; margin-top: 0;">🔒 CRM Login</h2>
+        <div id="error-msg" class="error">Cannot connect to server.</div>
+        <form id="loginForm">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+    </div>
 
-<div class="login-card">
-    <h2>🔒 CRM Login</h2>
-    <form id="loginForm">
-        <div class="input-group">
-            <label>Username</label>
-            <input type="text" id="username" required>
-        </div>
-        <div class="input-group">
-            <label>Password</label>
-            <input type="password" id="password" required>
-        </div>
-        <button type="submit">Log In</button>
-        <div id="error-message">Invalid username or password.</div>
-    </form>
-</div>
-
-<script>
-    // Listen for the user clicking the Log In button
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault(); // Prevent the browser from refreshing the page
-        
-        const user = document.getElementById('username').value;
-        const pass = document.getElementById('password').value;
-        const errorDiv = document.getElementById('error-message');
-
-        try {
-            // 1. Send credentials to our Python FastAPI backend
-            const response = await fetch('http://127.0.0.1:8082/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, password: pass })
-            });
-
-            const data = await response.json();
-
-            // 2. Handle the server's answer
-            if (response.ok) { // HTTP 200 Success
-                // Store the VIP wristband in the browser's memory
-                localStorage.setItem('crm_user', data.username);
-                localStorage.setItem('crm_role', data.role);
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const err = document.getElementById('error-msg');
+            
+            try {
+                // Pointing directly to your live Render backend
+                const res = await fetch('https://ai-crm-project-qqwx.onrender.com/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
                 
-                // Teleport the user to the main dashboard
-                window.location.href = 'index.html';
-            } else { // HTTP 401 Unauthorized
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = data.detail;
+                if (res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem('crm_user', data.username);
+                    window.location.href = 'index.html';
+                } else {
+                    err.textContent = "Invalid username or password.";
+                    err.style.display = 'block';
+                }
+            } catch (error) {
+                err.textContent = "Server is offline or unreachable.";
+                err.style.display = 'block';
             }
-        } catch (err) {
-            errorDiv.style.display = 'block';
-            errorDiv.textContent = 'Cannot connect to server. Is Python running?';
-        }
-    });
-</script>
-
+        });
+    </script>
 </body>
 </html>
