@@ -70,7 +70,7 @@ Guidelines:
 """
     try:
         response = ai_client.models.generate_content(
-            model="gemini-3.8-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
         return response.text.strip()
@@ -109,7 +109,7 @@ def get_leads_from_db(grade_filter: str = "ALL"):
 
 # Pre-configure the Agent with its Toolbelt
 crm_agent = ai_client.chats.create(
-    model="gemini-3.8-flash",
+    model="gemini-1.5-flash",
     config=types.GenerateContentConfig(
         tools=[get_leads_from_db],
         temperature=0.2

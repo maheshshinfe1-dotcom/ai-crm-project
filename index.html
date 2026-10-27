@@ -60,7 +60,7 @@
     </div>
 
     <script>
-        // Set your live Render URL globally
+        // Live Render URL
         const API_BASE = "https://ai-crm-project-qqwx.onrender.com";
 
         // Authentication Check
@@ -164,10 +164,15 @@
                     body: JSON.stringify({message: msg})
                 });
                 const data = await res.json();
-                box.innerHTML += `<div style="margin-bottom: 8px; color: #2c3e50;"><strong>AI:</strong> ${data.reply}</div>`;
+                
+                if (res.ok) {
+                    box.innerHTML += `<div style="margin-bottom: 8px; color: #2c3e50;"><strong>AI:</strong> ${data.reply}</div>`;
+                } else {
+                    box.innerHTML += `<div style="margin-bottom: 8px; color: red;"><strong>System:</strong> ${data.detail || 'Server busy.'}</div>`;
+                }
                 box.scrollTop = box.scrollHeight;
             } catch (e) {
-                box.innerHTML += `<div style="color:red;">Error connecting to AI Agent.</div>`;
+                box.innerHTML += `<div style="color:red;">Error connecting to API.</div>`;
             }
         }
 
