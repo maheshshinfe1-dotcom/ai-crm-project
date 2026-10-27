@@ -171,9 +171,9 @@ def create_new_lead(lead: LeadCreate):
 def generate_counselor_pitch(name, course, grade):
     prompt = f"Write a short, engaging 2-sentence sales pitch for {name} who is interested in {course}. Their lead grade is {grade}."
     try:
-        # ✅ FIXED: Using 1.5 Flash
+        # ✅ FIXED: Using 2.5 Flash
         response = ai_client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text
@@ -198,9 +198,9 @@ def crm_agent(user_message):
     A user just asked: "{user_message}"
     Answer them helpfully."""
     try:
-        # ✅ FIXED: Using 1.5 Flash
+        # ✅ FIXED: Using 2.5 Flash
         response = ai_client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text
