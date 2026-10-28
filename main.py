@@ -173,7 +173,7 @@ def generate_counselor_pitch(name, course, grade):
     try:
         # ✅ FIXED: Using 2.5 Flash
         response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             contents=prompt
         )
         return response.text
@@ -200,7 +200,7 @@ def crm_agent(user_message):
     try:
         # ✅ FIXED: Using 2.5 Flash
         response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             contents=prompt
         )
         return response.text
