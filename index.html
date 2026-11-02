@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI EDU-CRM | Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f7f6; display: flex; height: 100vh; }
+        .sidebar { width: 250px; background: #2c3e50; color: white; padding: 20px; display: flex; flex-direction: column; }
+        .main { flex-grow: 1; padding: 30px; overflow-y: auto; }
+        .kpi-grid { display: flex; gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background: #f8fafc; }
+        .btn { background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #4f46e5; }
+        .ai-panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        input, select { padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>AI EDU-CRM</h2>
+        <p>Logged in as: <br><strong id="user-name">User</strong></p>
+        <button class="btn" style="background: #e74c3c; margin-top: auto;" onclick="logout()">Logout</button>
+    </div>
+    
+    <div class="main">
+        <h2>Dashboard Overview</h2>
+        <div class="kpi-grid" id="kpi-container">
+            <div class="kpi-card">Loading KPIs...</div>
+        </div>
+
+        <h2>Add New Lead</h2>
+        <div class="ai-panel">
+            <input type="text" id="n_name" placeholder="Full Name" required>
+            <input type="text" id="n_phone" placeholder="Phone Number" required>
+            <input type="text" id="n_course" placeholder="Course Interest" required>
+            <input type="text" id="n_source" placeholder="Source (e.g. Google)">
+            <button class="btn" onclick="addLead()">Save Lead</button>
+        </div>
+
+        <h2>Lead Pipeline</h2>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Phone</th><th>Course</th><th>Grade</th><th>AI Assist</th></tr>
+            </thead>
+            <tbody id="leads-body">
+                <tr><td colspan="6">Loading records from cloud...</td></tr>
+            </tbody>
+        </table>
+
+        <h2>🤖 AI Agent Assistant</h2>
+        <div class="ai-panel">
+            <div id="chat-box" style="height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #fafafa; border-radius: 4px;"></div>
+            <input type="text" id="chat-input" placeholder="Ask AI to filter or analyze leads..." style="width: 80%;">
+            <button class="btn" onclick="sendChat()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Live Render URL
+        const API_BASE = "https://ai-crm-project-qqwx.onrender.com";
+
+        // Authentication Check
+        if(!localStorage.getItem('crm_user')) window.location.href = 'login.html';
+        document.getElementById('user-name').textContent = localStorage.getItem('crm_user');
+
+        function logout() {
+            localStorage.removeItem('crm_user');
+            window.location.href = 'login.html';
+        }
+
+        // Fetch Dashboard Data
+        async function loadDashboard() {
+            try {
+                const res = await fetch(`${API_BASE}/api/dashboard`);
+                const data = await res.json();
+                document.getElementById('kpi-container').innerHTML = `
+                    <div class="kpi-card"><span style="color: #666;">Total Leads</span><br><h2 style="margin:5px 0;">${data.kpis.total_leads}</h2></div>
+                    <div class="kpi-card"><span style="color: #666;">Students</span><br><h2 style="margin:5px 0;">${data.kpis.enrolled_students}</h2></div>
+                    <div class="kpi-card"><span style="color: #666;">Pipeline Value</span><br><h2 style="margin:5px 0;">$${data.kpis.pipeline_value}</h2></div>
+                    <div class="kpi-card"><span style="color: #666;">Revenue</span><br><h2 style="margin:5px 0;">$${data.kpis.revenue_collected}</h2></div>
+                `;
+            } catch (e) { console.error("KPI Error:", e); }
+        }
+
+        // Fetch Leads Database
+        async function loadLeads() {
+            try {
+                const res = await fetch(`${API_BASE}/api/leads`);
+                const leads = await res.json();
+                const tbody = document.getElementById('leads-body');
+                tbody.innerHTML = '';
+                leads.forEach(l => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${l.lead_id}</td>
+                            <td>${l.name}</td>
+                            <td>${l.phone}</td>
+                            <td>${l.course}</td>
+                            <td><strong>${l.grade}</strong></td>
+                            <td><button class="btn" onclick="generatePitch('${l.lead_id}')">✨ Generate Pitch</button></td>
+                        </tr>
+                    `;
+                });
+            } catch (e) { console.error("Leads Error:", e); }
+        }
+
+        // Add a New Lead
+        async function addLead() {
+            const payload = {
+                name: document.getElementById('n_name').value,
+                phone: document.getElementById('n_phone').value,
+                course: document.getElementById('n_course').value,
+                source: document.getElementById('n_source').value || 'organic',
+                assigned_to: localStorage.getItem('crm_user')
+            };
+            
+            await fetch(`${API_BASE}/api/leads`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            // Clear inputs and refresh tables
+            document.getElementById('n_name').value = '';
+            document.getElementById('n_phone').value = '';
+            document.getElementById('n_course').value = '';
+            document.getElementById('n_source').value = '';
+            
+            loadLeads();
+            loadDashboard();
+        }
+
+        // Generate AI Sales Pitch
+        async function generatePitch(leadId) {
+            alert("AI is drafting a personalized pitch... Please click OK and wait a moment.");
+            const res = await fetch(`${API_BASE}/api/pitch`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({lead_id: leadId})
+            });
+            const data = await res.json();
+            alert("✨ AI GENERATED PITCH:\n\n" + data.pitch);
+        }
+
+        // Interact with AI Tool Calling Agent
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const box = document.getElementById('chat-box');
+            if(!input.value) return;
+            
+            box.innerHTML += `<div style="margin-bottom: 8px;"><strong>You:</strong> ${input.value}</div>`;
+            const msg = input.value;
+            input.value = '';
+            box.scrollTop = box.scrollHeight;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg})
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    box.innerHTML += `<div style="margin-bottom: 8px; color: #2c3e50;"><strong>AI:</strong> ${data.reply}</div>`;
+                } else {
+                    box.innerHTML += `<div style="margin-bottom: 8px; color: red;"><strong>System:</strong> ${data.detail || 'Server busy.'}</div>`;
+                }
+                box.scrollTop = box.scrollHeight;
+            } catch (e) {
+                box.innerHTML += `<div style="color:red;">Error connecting to API.</div>`;
+            }
+        }
+
+        // Boot up the dashboard data on load
+        loadDashboard();
+        loadLeads();
+    </script>
+</body>
+</html>
