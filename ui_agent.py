@@ -7,33 +7,23 @@ from google import genai
 from google.genai.errors import ServerError, APIError
 
 # 1. Page Configuration
-st.set_page_config(
-    page_title="AI EDU-CRM Enterprise", 
-    page_icon="🎓", 
-    layout="wide"
-)
+st.set_page_config(page_title="AI EDU-CRM Enterprise", page_icon="🎓", layout="wide")
 
 # 2. Cached Database & AI Engine Initialization
 @st.cache_resource
 def load_engines():
-    # ChromaDB Vector DB
     chroma_client = chromadb.PersistentClient(path="./crm_memory_db")
     embedder = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
     collection = chroma_client.get_collection(name="company_policies", embedding_function=embedder)
-    
-    # Google Gemini AI Client via Streamlit Secrets
     ai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    
     return collection, ai_client
 
 collection, ai_client = load_engines()
 
 # 3. Database Helpers
 def get_leads_df():
-    """Fetches all leads from SQLite into a Pandas DataFrame."""
     try:
         conn = sqlite3.connect("crm_enterprise.db")
-        # Query all available columns without forcing an explicit 'id'
         df = pd.read_sql_query("SELECT * FROM leads", conn)
         conn.close()
         return df
@@ -42,7 +32,6 @@ def get_leads_df():
         return pd.DataFrame()
 
 def get_hot_leads():
-    """Fetches top 5 HOT leads for the chat assistant."""
     try:
         conn = sqlite3.connect("crm_enterprise.db")
         cursor = conn.cursor()
@@ -55,6 +44,22 @@ def get_hot_leads():
     except Exception as e:
         return f"Database error: {e}"
 
+def add_new_lead(name, phone, course, grade):
+    """Inserts a new prospect directly into the SQLite database."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO leads (name, phone, course, grade) VALUES (?, ?, ?, ?)",
+            (name, phone, course, grade)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Failed to add lead: {e}")
+        return False
+
 # 4. App Navigation Tabs
 tab_chat, tab_analytics = st.tabs(["💬 AI Co-Pilot", "📊 Lead Analytics & BI"])
 
@@ -65,16 +70,13 @@ with tab_chat:
     st.subheader("AI Support & CRM Intelligence")
     st.caption("Ask questions about company refund/enrollment policies or request lead summaries.")
     
-    # Initialize message history
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat input
     if user_input := st.chat_input("Ask a question... (e.g., 'What is our refund policy?' or 'Show hot leads')"):
         with st.chat_message("user"):
             st.markdown(user_input)
@@ -83,7 +85,6 @@ with tab_chat:
         with st.chat_message("assistant"):
             user_text = user_input.lower().strip()
 
-            # Intent Routing
             if user_text in ["hi", "hello", "hey", "how are you", "how are you?"]:
                 hidden_context = "The user is saying hello. Greet them politely as the EDU-CRM AI Co-Pilot."
             elif "lead" in user_text or "customer" in user_text or "prospect" in user_text:
@@ -94,7 +95,6 @@ with tab_chat:
                 raw_data = results['documents'][0][0]
                 hidden_context = f"The user asked a policy question. Here is the exact policy text:\n{raw_data}\n\nAnswer using ONLY this policy."
 
-            # Generation with Fallback
             try:
                 master_prompt = f"User Question: '{user_input}'\n\nInstructions: {hidden_context}"
                 response = ai_client.models.generate_content(
@@ -115,10 +115,28 @@ with tab_chat:
 # ==========================================
 with tab_analytics:
     st.subheader("Live CRM Executive Dashboard")
+    
+    # --- NEW: LEAD INGESTION FORM ---
+    with st.expander("➕ Add New Prospect", expanded=False):
+        with st.form("add_lead_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            new_name = col1.text_input("Full Name")
+            new_phone = col2.text_input("Phone Number")
+            new_course = col1.selectbox("Interested Course", ["SQL", "Python", "AI Engineering", "Data Science Bootcamp", "Python Mastery"])
+            new_grade = col2.selectbox("Lead Grade", ["HOT", "WARM", "COLD"])
+            
+            if st.form_submit_button("💾 Save Lead"):
+                if new_name and new_phone:
+                    if add_new_lead(new_name, new_phone, new_course, new_grade):
+                        st.success(f"Successfully added {new_name} to the CRM!")
+                        st.rerun() # Instantly refreshes the dashboard
+                else:
+                    st.error("Please fill in both Name and Phone.")
+    
+    # --- DASHBOARD RENDERING ---
     df_leads = get_leads_df()
 
     if not df_leads.empty:
-        # Standardize Grade Column
         df_leads['grade_clean'] = df_leads['grade'].str.upper().str.strip()
 
         total_leads = len(df_leads)
@@ -126,7 +144,6 @@ with tab_analytics:
         warm_count = len(df_leads[df_leads['grade_clean'].str.contains("WARM", na=False)])
         cold_count = len(df_leads[df_leads['grade_clean'].str.contains("COLD", na=False)])
 
-        # Top KPI Metrics Row
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Prospects", total_leads)
         col2.metric("🔥 Hot Leads", hot_count)
@@ -135,7 +152,6 @@ with tab_analytics:
 
         st.divider()
 
-        # Visual Charts Row
         chart_col1, chart_col2 = st.columns(2)
 
         with chart_col1:
@@ -150,7 +166,6 @@ with tab_analytics:
 
         st.divider()
 
-        # Interactive Lead Data Explorer
         st.markdown("#### 📋 Lead Records Explorer")
         search_query = st.text_input("🔍 Filter by Name, Course, or Phone:")
         
@@ -162,9 +177,9 @@ with tab_analytics:
                 df_leads['phone'].astype(str).str.contains(search_query, case=False, na=False)
             ]
 
-        st.dataframe(filtered_df, use_container_width=True)
+        # Deprecation warning fixed: changed use_container_width=True to width="stretch"
+        st.dataframe(filtered_df, width="stretch")
 
-        # CSV Export Button
         csv_data = filtered_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Export Filtered Leads to CSV",
