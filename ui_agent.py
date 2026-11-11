@@ -3,11 +3,36 @@ import chromadb
 from chromadb.utils import embedding_functions
 import sqlite3
 import pandas as pd
+import uuid
 from google import genai
 from google.genai.errors import ServerError, APIError
 
 # 1. Page Configuration
 st.set_page_config(page_title="AI EDU-CRM Enterprise", page_icon="🎓", layout="wide")
+
+# ==========================================
+# 🔒 SECURITY GATEWAY
+# ==========================================
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("🔒 CRM Security Gateway")
+    st.markdown("Please log in to access the Enterprise CRM.")
+    
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login")
+        
+        if submit:
+            if username == st.secrets["ADMIN_USER"] and password == st.secrets["ADMIN_PASSWORD"]:
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("❌ Invalid username or password.")
+    
+    st.stop()
 
 # 2. Cached Database & AI Engine Initialization
 @st.cache_resource
@@ -45,7 +70,6 @@ def get_hot_leads():
         return f"Database error: {e}"
 
 def add_new_lead(name, phone, course, grade):
-    """Inserts a new prospect directly into the SQLite database."""
     try:
         conn = sqlite3.connect("crm_enterprise.db")
         cursor = conn.cursor()
@@ -60,12 +84,45 @@ def add_new_lead(name, phone, course, grade):
         st.error(f"Failed to add lead: {e}")
         return False
 
-# 4. App Navigation Tabs
-tab_chat, tab_analytics = st.tabs(["💬 AI Co-Pilot", "📊 Lead Analytics & BI"])
+def add_document_to_db(file_name, file_content):
+    try:
+        doc_id = str(uuid.uuid4())
+        collection.add(
+            documents=[file_content],
+            metadatas=[{"source": file_name}],
+            ids=[doc_id]
+        )
+        return True
+    except Exception as e:
+        st.error(f"Vector DB Error: {e}")
+        return False
 
 # ==========================================
-# TAB 1: AI CO-PILOT (CHAT INTERFACE)
+# --- ADMIN SIDEBAR ---
 # ==========================================
+with st.sidebar:
+    st.markdown(f"👤 **Logged in as:** `{st.secrets['ADMIN_USER']}`")
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+        
+    st.divider()
+    
+    st.markdown("### 📄 Teach AI New Rules")
+    uploaded_file = st.file_uploader("Upload a .txt policy file", type=["txt"])
+    
+    if uploaded_file is not None:
+        if st.button("🧠 Memorize Document"):
+            with st.spinner("Embedding document into vector space..."):
+                content = uploaded_file.getvalue().decode("utf-8")
+                if add_document_to_db(uploaded_file.name, content):
+                    st.success(f"Successfully memorized {uploaded_file.name}!")
+
+# ==========================================
+# CORE CRM APPLICATION 
+# ==========================================
+tab_chat, tab_analytics = st.tabs(["💬 AI Co-Pilot", "📊 Lead Analytics & BI"])
+
 with tab_chat:
     st.subheader("AI Support & CRM Intelligence")
     st.caption("Ask questions about company refund/enrollment policies or request lead summaries.")
@@ -77,7 +134,7 @@ with tab_chat:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if user_input := st.chat_input("Ask a question... (e.g., 'What is our refund policy?' or 'Show hot leads')"):
+    if user_input := st.chat_input("Ask a question..."):
         with st.chat_message("user"):
             st.markdown(user_input)
         st.session_state.messages.append({"role": "user", "content": user_input})
@@ -110,13 +167,9 @@ with tab_chat:
             st.markdown(final_answer)
             st.session_state.messages.append({"role": "assistant", "content": final_answer})
 
-# ==========================================
-# TAB 2: DATA ANALYTICS & VISUALIZATIONS
-# ==========================================
 with tab_analytics:
     st.subheader("Live CRM Executive Dashboard")
     
-    # --- NEW: LEAD INGESTION FORM ---
     with st.expander("➕ Add New Prospect", expanded=False):
         with st.form("add_lead_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -129,11 +182,10 @@ with tab_analytics:
                 if new_name and new_phone:
                     if add_new_lead(new_name, new_phone, new_course, new_grade):
                         st.success(f"Successfully added {new_name} to the CRM!")
-                        st.rerun() # Instantly refreshes the dashboard
+                        st.rerun() 
                 else:
                     st.error("Please fill in both Name and Phone.")
     
-    # --- DASHBOARD RENDERING ---
     df_leads = get_leads_df()
 
     if not df_leads.empty:
@@ -177,7 +229,6 @@ with tab_analytics:
                 df_leads['phone'].astype(str).str.contains(search_query, case=False, na=False)
             ]
 
-        # Deprecation warning fixed: changed use_container_width=True to width="stretch"
         st.dataframe(filtered_df, width="stretch")
 
         csv_data = filtered_df.to_csv(index=False).encode('utf-8')
@@ -187,5 +238,45 @@ with tab_analytics:
             file_name="crm_leads_export.csv",
             mime="text/csv"
         )
+        
+        st.divider()
+        
+        # --- NEW: AI EMAIL GENERATOR ---
+        with st.expander("✉️ Generate AI Sales Email", expanded=False):
+            st.markdown("Select a lead to automatically draft a personalized sales outreach email.")
+            
+            lead_names = df_leads['name'].tolist()
+            selected_name = st.selectbox("Select a Lead to email:", lead_names)
+            
+            if st.button("🪄 Draft Email"):
+                # Extract the specific row for the selected lead
+                lead_row = df_leads[df_leads['name'] == selected_name].iloc[0]
+                
+                # Dynamic prompt engineering based on lead temperature
+                prompt = f"""
+                Write a highly personalized, professional but friendly sales email to a prospect named {lead_row['name']}.
+                They are interested in enrolling in our '{lead_row['course']}' course.
+                Their current sales status is: '{lead_row['grade']}'.
+                
+                Instructions:
+                - If their status is HOT, push strongly for an immediate enrollment phone call to secure their spot.
+                - If WARM, offer them a detailed course syllabus and ask if they have questions.
+                - If COLD, gently check in, mention a recent student success story, and offer a 10% discount.
+                - Keep the email concise (under 150 words). 
+                - Sign off as "The AI EDU-CRM Team".
+                """
+                
+                with st.spinner("AI is drafting the email..."):
+                    try:
+                        response = ai_client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=prompt
+                        )
+                        st.text_area("Drafted Email (Ready to Copy):", value=response.text, height=250)
+                    except (ServerError, APIError):
+                        st.error("⚠️ Google AI is currently busy. Please wait a few seconds and click Draft again.")
+                    except Exception as e:
+                        st.error(f"Error generating email: {e}")
+
     else:
-        st.warning("No data found in crm_enterprise.db.")
+        st.warning("No data found in crm_enterprise.db.")   
