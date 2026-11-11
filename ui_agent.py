@@ -9,42 +9,6 @@ from google.genai.errors import ServerError, APIError
 # 1. Page Configuration
 st.set_page_config(page_title="AI EDU-CRM Enterprise", page_icon="🎓", layout="wide")
 
-# ==========================================
-# 🔒 SECURITY GATEWAY
-# ==========================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-    st.title("🔒 CRM Security Gateway")
-    st.markdown("Please log in to access the Enterprise CRM.")
-    
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Login")
-        
-        if submit:
-            if username == st.secrets["ADMIN_USER"] and password == st.secrets["ADMIN_PASSWORD"]:
-                st.session_state.logged_in = True
-                st.rerun() # Refresh the page to show the CRM
-            else:
-                st.error("❌ Invalid username or password.")
-    
-    # Stop the script here so unauthorized users see nothing else
-    st.stop()
-
-# --- LOGOUT SIDEBAR ---
-with st.sidebar:
-    st.markdown(f"👤 **Logged in as:** `{st.secrets['ADMIN_USER']}`")
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-# ==========================================
-# CORE CRM APPLICATION (Only runs if logged in)
-# ==========================================
-
 # 2. Cached Database & AI Engine Initialization
 @st.cache_resource
 def load_engines():
@@ -81,6 +45,7 @@ def get_hot_leads():
         return f"Database error: {e}"
 
 def add_new_lead(name, phone, course, grade):
+    """Inserts a new prospect directly into the SQLite database."""
     try:
         conn = sqlite3.connect("crm_enterprise.db")
         cursor = conn.cursor()
@@ -98,6 +63,9 @@ def add_new_lead(name, phone, course, grade):
 # 4. App Navigation Tabs
 tab_chat, tab_analytics = st.tabs(["💬 AI Co-Pilot", "📊 Lead Analytics & BI"])
 
+# ==========================================
+# TAB 1: AI CO-PILOT (CHAT INTERFACE)
+# ==========================================
 with tab_chat:
     st.subheader("AI Support & CRM Intelligence")
     st.caption("Ask questions about company refund/enrollment policies or request lead summaries.")
@@ -109,7 +77,7 @@ with tab_chat:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if user_input := st.chat_input("Ask a question..."):
+    if user_input := st.chat_input("Ask a question... (e.g., 'What is our refund policy?' or 'Show hot leads')"):
         with st.chat_message("user"):
             st.markdown(user_input)
         st.session_state.messages.append({"role": "user", "content": user_input})
@@ -142,9 +110,13 @@ with tab_chat:
             st.markdown(final_answer)
             st.session_state.messages.append({"role": "assistant", "content": final_answer})
 
+# ==========================================
+# TAB 2: DATA ANALYTICS & VISUALIZATIONS
+# ==========================================
 with tab_analytics:
     st.subheader("Live CRM Executive Dashboard")
     
+    # --- NEW: LEAD INGESTION FORM ---
     with st.expander("➕ Add New Prospect", expanded=False):
         with st.form("add_lead_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -157,10 +129,11 @@ with tab_analytics:
                 if new_name and new_phone:
                     if add_new_lead(new_name, new_phone, new_course, new_grade):
                         st.success(f"Successfully added {new_name} to the CRM!")
-                        st.rerun() 
+                        st.rerun() # Instantly refreshes the dashboard
                 else:
                     st.error("Please fill in both Name and Phone.")
     
+    # --- DASHBOARD RENDERING ---
     df_leads = get_leads_df()
 
     if not df_leads.empty:
@@ -204,6 +177,7 @@ with tab_analytics:
                 df_leads['phone'].astype(str).str.contains(search_query, case=False, na=False)
             ]
 
+        # Deprecation warning fixed: changed use_container_width=True to width="stretch"
         st.dataframe(filtered_df, width="stretch")
 
         csv_data = filtered_df.to_csv(index=False).encode('utf-8')
