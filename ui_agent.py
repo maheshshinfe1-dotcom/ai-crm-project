@@ -56,6 +56,18 @@ def get_leads_df():
         st.error(f"Error reading SQLite database: {e}")
         return pd.DataFrame()
 
+def update_leads_db(edited_df):
+    """Overwrites the SQLite leads table with the updated dataframe from the UI."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        clean_df = edited_df.drop(columns=["grade_clean"], errors="ignore")
+        clean_df.to_sql("leads", conn, if_exists="replace", index=False)
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Failed to update database: {e}")
+        return False
+
 def get_hot_leads():
     try:
         conn = sqlite3.connect("crm_enterprise.db")
@@ -218,18 +230,32 @@ with tab_analytics:
 
         st.divider()
 
-        st.markdown("#### 📋 Lead Records Explorer")
+        st.markdown("#### 📋 Lead Records Explorer & Editor")
         search_query = st.text_input("🔍 Filter by Name, Course, or Phone:")
         
-        filtered_df = df_leads
+        display_df = df_leads.drop(columns=["grade_clean"])
+        filtered_df = display_df
         if search_query:
-            filtered_df = df_leads[
-                df_leads['name'].str.contains(search_query, case=False, na=False) |
-                df_leads['course'].str.contains(search_query, case=False, na=False) |
-                df_leads['phone'].astype(str).str.contains(search_query, case=False, na=False)
+            filtered_df = display_df[
+                display_df['name'].str.contains(search_query, case=False, na=False) |
+                display_df['course'].str.contains(search_query, case=False, na=False) |
+                display_df['phone'].astype(str).str.contains(search_query, case=False, na=False)
             ]
 
-        st.dataframe(filtered_df, width="stretch")
+        st.caption("💡 Double-click any cell to edit it, or select a row checkbox on the left and press Delete.")
+        edited_df = st.data_editor(
+            filtered_df,
+            width="stretch",
+            num_rows="dynamic"
+        )
+
+        if search_query:
+            st.info("Clear the search filter above before saving edits to prevent overwriting hidden records.")
+        else:
+            if st.button("💾 Save Database Changes"):
+                if update_leads_db(edited_df):
+                    st.success("Database successfully updated!")
+                    st.rerun()
 
         csv_data = filtered_df.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -241,7 +267,7 @@ with tab_analytics:
         
         st.divider()
         
-        # --- NEW: AI EMAIL GENERATOR ---
+        # --- AI EMAIL GENERATOR ---
         with st.expander("✉️ Generate AI Sales Email", expanded=False):
             st.markdown("Select a lead to automatically draft a personalized sales outreach email.")
             
@@ -249,10 +275,8 @@ with tab_analytics:
             selected_name = st.selectbox("Select a Lead to email:", lead_names)
             
             if st.button("🪄 Draft Email"):
-                # Extract the specific row for the selected lead
                 lead_row = df_leads[df_leads['name'] == selected_name].iloc[0]
                 
-                # Dynamic prompt engineering based on lead temperature
                 prompt = f"""
                 Write a highly personalized, professional but friendly sales email to a prospect named {lead_row['name']}.
                 They are interested in enrolling in our '{lead_row['course']}' course.
