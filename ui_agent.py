@@ -279,4 +279,4 @@ with tab_analytics:
                         st.error(f"Error generating email: {e}")
 
     else:
-        st.warning("No data found in crm_enterprise.db.")   
+        st.warning("No data found in crm_enterprise.db.")
