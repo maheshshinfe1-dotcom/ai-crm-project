@@ -28,11 +28,14 @@ if not st.session_state.logged_in:
         if submit:
             if username == st.secrets["ADMIN_USER"] and password == st.secrets["ADMIN_PASSWORD"]:
                 st.session_state.logged_in = True
+                st.session_state.current_user = username
                 st.rerun()
             else:
                 st.error("❌ Invalid username or password.")
     
     st.stop()
+
+current_user = st.session_state.get("current_user", st.secrets["ADMIN_USER"])
 
 # 2. Cached Database & AI Engine Initialization
 @st.cache_resource
@@ -45,7 +48,69 @@ def load_engines():
 
 collection, ai_client = load_engines()
 
-# 3. Database Helpers
+# 3. Database Helpers (Leads & Persistent Chat)
+def init_chat_db():
+    """Creates the chat_history table in SQLite if it does not already exist."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        st.error(f"Chat DB Init Error: {e}")
+
+def load_chat_history(username):
+    """Loads saved messages for the logged-in user from SQLite."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT role, content FROM chat_history WHERE username = ? ORDER BY id ASC",
+            (username,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"role": row[0], "content": row[1]} for row in rows]
+    except Exception as e:
+        st.error(f"Failed to load chat history: {e}")
+        return []
+
+def save_chat_message(username, role, content):
+    """Persists a single chat message into SQLite."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO chat_history (username, role, content) VALUES (?, ?, ?)",
+            (username, role, content)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        st.error(f"Failed to save chat message: {e}")
+
+def clear_chat_history(username):
+    """Deletes all saved messages for the logged-in user."""
+    try:
+        conn = sqlite3.connect("crm_enterprise.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chat_history WHERE username = ?", (username,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        st.error(f"Failed to clear chat history: {e}")
+
+init_chat_db()
+
 def get_leads_df():
     try:
         conn = sqlite3.connect("crm_enterprise.db")
@@ -113,9 +178,10 @@ def add_document_to_db(file_name, file_content):
 # --- ADMIN SIDEBAR ---
 # ==========================================
 with st.sidebar:
-    st.markdown(f"👤 **Logged in as:** `{st.secrets['ADMIN_USER']}`")
+    st.markdown(f"👤 **Logged in as:** `{current_user}`")
     if st.button("Logout"):
         st.session_state.logged_in = False
+        st.session_state.pop("messages", None)
         st.rerun()
         
     st.divider()
@@ -130,6 +196,14 @@ with st.sidebar:
                 if add_document_to_db(uploaded_file.name, content):
                     st.success(f"Successfully memorized {uploaded_file.name}!")
 
+    st.divider()
+
+    st.markdown("### 💬 Chat Memory")
+    if st.button("🗑️ Clear Chat History"):
+        clear_chat_history(current_user)
+        st.session_state.messages = []
+        st.rerun()
+
 # ==========================================
 # CORE CRM APPLICATION 
 # ==========================================
@@ -140,7 +214,7 @@ with tab_chat:
     st.caption("Ask questions about company refund/enrollment policies or request lead summaries.")
     
     if "messages" not in st.session_state:
-        st.session_state.messages = []
+        st.session_state.messages = load_chat_history(current_user)
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -150,6 +224,7 @@ with tab_chat:
         with st.chat_message("user"):
             st.markdown(user_input)
         st.session_state.messages.append({"role": "user", "content": user_input})
+        save_chat_message(current_user, "user", user_input)
 
         with st.chat_message("assistant"):
             user_text = user_input.lower().strip()
@@ -178,6 +253,7 @@ with tab_chat:
 
             st.markdown(final_answer)
             st.session_state.messages.append({"role": "assistant", "content": final_answer})
+            save_chat_message(current_user, "assistant", final_answer)
 
 with tab_analytics:
     st.subheader("Live CRM Executive Dashboard")
