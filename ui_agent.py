@@ -4,7 +4,9 @@ from chromadb.utils import embedding_functions
 import sqlite3
 import pandas as pd
 import uuid
+import hashlib
 from google import genai
+from google.genai import types
 from google.genai.errors import ServerError, APIError
 
 # 1. Page Configuration
@@ -48,7 +50,7 @@ def load_engines():
 
 collection, ai_client = load_engines()
 
-# 3. Database Helpers (Leads & Persistent Chat)
+# 3. Database & Multimodal Helpers
 def init_chat_db():
     """Creates the chat_history table in SQLite if it does not already exist."""
     try:
@@ -110,6 +112,24 @@ def clear_chat_history(username):
         st.error(f"Failed to clear chat history: {e}")
 
 init_chat_db()
+
+def transcribe_audio(audio_bytes):
+    """Transcribes WAV audio bytes into plain text using Gemini multimodal input."""
+    try:
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                "Transcribe this spoken audio accurately into plain text. Return ONLY the transcribed words with no extra commentary.",
+                types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+            ]
+        )
+        return response.text.strip()
+    except (ServerError, APIError):
+        st.error("⚠️ Google AI transcription endpoint is currently busy. Please try again in a few seconds.")
+        return None
+    except Exception as e:
+        st.error(f"⚠️ Audio transcription error: {e}")
+        return None
 
 def get_leads_df():
     try:
@@ -182,6 +202,7 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.pop("messages", None)
+        st.session_state.pop("last_audio_hash", None)
         st.rerun()
         
     st.divider()
@@ -211,7 +232,7 @@ tab_chat, tab_analytics = st.tabs(["💬 AI Co-Pilot", "📊 Lead Analytics & BI
 
 with tab_chat:
     st.subheader("AI Support & CRM Intelligence")
-    st.caption("Ask questions about company refund/enrollment policies or request lead summaries.")
+    st.caption("Type or record a voice question about company policies or lead summaries.")
     
     if "messages" not in st.session_state:
         st.session_state.messages = load_chat_history(current_user)
@@ -220,14 +241,36 @@ with tab_chat:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if user_input := st.chat_input("Ask a question..."):
+    # Unified Voice + Text Input
+    audio_value = st.audio_input("🎙️ Speak your question")
+    typed_input = st.chat_input("Ask a question...")
+
+    prompt_to_process = None
+    display_user_msg = None
+
+    if audio_value is not None:
+        audio_bytes = audio_value.getvalue()
+        audio_hash = hashlib.md5(audio_bytes).hexdigest()
+        if audio_hash != st.session_state.get("last_audio_hash"):
+            st.session_state.last_audio_hash = audio_hash
+            with st.spinner("Transcribing voice query..."):
+                transcribed = transcribe_audio(audio_bytes)
+            if transcribed:
+                prompt_to_process = transcribed
+                display_user_msg = f"🎙️ {transcribed}"
+
+    if typed_input:
+        prompt_to_process = typed_input
+        display_user_msg = typed_input
+
+    if prompt_to_process:
         with st.chat_message("user"):
-            st.markdown(user_input)
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        save_chat_message(current_user, "user", user_input)
+            st.markdown(display_user_msg)
+        st.session_state.messages.append({"role": "user", "content": display_user_msg})
+        save_chat_message(current_user, "user", display_user_msg)
 
         with st.chat_message("assistant"):
-            user_text = user_input.lower().strip()
+            user_text = prompt_to_process.lower().strip()
 
             if user_text in ["hi", "hello", "hey", "how are you", "how are you?"]:
                 hidden_context = "The user is saying hello. Greet them politely as the EDU-CRM AI Co-Pilot."
@@ -235,12 +278,12 @@ with tab_chat:
                 raw_data = get_hot_leads()
                 hidden_context = f"The user asked about leads. Here is the raw SQL data:\n{raw_data}\n\nSummarize this professionally."
             else:
-                results = collection.query(query_texts=[user_input], n_results=1)
+                results = collection.query(query_texts=[prompt_to_process], n_results=1)
                 raw_data = results['documents'][0][0]
                 hidden_context = f"The user asked a policy question. Here is the exact policy text:\n{raw_data}\n\nAnswer using ONLY this policy."
 
             try:
-                master_prompt = f"User Question: '{user_input}'\n\nInstructions: {hidden_context}"
+                master_prompt = f"User Question: '{prompt_to_process}'\n\nInstructions: {hidden_context}"
                 response = ai_client.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=master_prompt
