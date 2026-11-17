@@ -159,3 +159,8 @@ def create_lead_record_tool(name: str, phone: str, course: str, grade: str = "WA
     if add_new_lead(name.strip(), phone.strip(), course.strip(), clean_grade):
         return f"Created new lead: {name} | Phone: {phone} | Course: {course} | Grade: {clean_grade}."
     return f"Failed to create lead record for {name}."
+
+    # Phase 16 Performance Indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_grade ON leads(grade)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_history(username)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_lead_date ON automation_logs(lead_name, timestamp)")
